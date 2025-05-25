@@ -1,31 +1,67 @@
+version: '3.8' # Рекомендуется указывать версию docker-compose
+
 services:
-  scraperr:
+  scraperr: # Это сервис фронтенда
     image: jpyles0524/scraperr:latest
-    container_name: scraperr
+    # container_name: scraperr # Coolify обычно сам назначает имена контейнеров, лучше это убрать или оставить, но Coolify может переопределить
     command: ["npm", "run", "start"]
     environment:
-      - 'NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}' # your API URL
-      - 'SERVER_URL=${SERVER_URL}' # your docker container API URL
+      # Эти переменные будут переопределены значениями из Coolify UI
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://scraperr_api:8000} # Значение по умолчанию, если не задано в Coolify
+      - SERVER_URL=${SERVER_URL:-http://scraperr_api:8000} # Значение по умолчанию, если не задано в Coolify
     ports:
-      - '${scraperr_port}'
+      # Coolify будет управлять маппингом портов через переменную ${scraperr_port} из UI.
+      # Здесь мы указываем только внутренний порт контейнера, который должен быть открыт.
+      # Coolify сам сделает маппинг ХОСТ:КОНТЕЙНЕР на основе ${scraperr_port}.
+      - "3000" # Просто внутренний порт, который слушает приложение scraperr
     networks:
-      - web
+      - web # Общая сеть для связи с API
     labels:
-      - "traefik.enable=true" # Эта метка уже должна быть, если Traefik включен для сервиса
-      - "traefik.http.services.scraperr.loadbalancer.server.port=3000" # <-- ВАЖНАЯ МЕТКА!
-  scraperr_api:
-    init: True
+      - "traefik.enable=true"
+      # Coolify сгенерирует имя роутера и правила на основе домена, указанного в UI.
+      # Нам нужно указать Traefik, на какой внутренний порт направлять трафик для этого сервиса.
+      # Имя сервиса для Traefik (scraperr-frontend) можно выбрать произвольно, но оно должно быть уникальным.
+      # Или использовать имя, которое Coolify генерирует (обычно включает ID ресурса).
+      # Проверим, как Coolify генерирует имя сервиса для роутера фронтенда:
+      # `traefik.http.routers.http-0-b8s4c4444kosg0s8co4c884s-scraperr.service` - вот это имя нам нужно
+      - "traefik.http.services.http-0-b8s4c4444kosg0s8co4c884s-scraperr.loadbalancer.server.port=3000"
+
+  scraperr_api: # Это сервис API
+    init: true
     image: jpyles0524/scraperr_api:latest
+    # container_name: scraperr_api # Coolify обычно сам назначает имена
     environment:
-      - LOG_LEVEL=INFO
-    container_name: scraperr_api
+      - LOG_LEVEL=${LOG_LEVEL:-INFO} # Можно управлять через Coolify UI
     ports:
-      - '${scraperr_api_port}'
+      # Coolify будет управлять маппингом портов через переменную ${scraperr_api_port} из UI.
+      - "8000" # Просто внутренний порт, который слушает приложение scraperr_api
     volumes:
-      - "$PWD/data:/project/app/data"
-      - "$PWD/media:/project/app/media"
+      # Coolify будет управлять этими томами, подставляя корректные пути вместо $PWD
+      - "./data:/project/app/data"  # Используем относительный путь, Coolify разберется
+      - "./media:/project/app/media" # Используем относительный путь
     networks:
-      - web
+      - web # Общая сеть
+    labels:
+      - "traefik.enable=true"
+      # Coolify сгенерирует имя роутера и правила для API.
+      # Имя сервиса `http-0-b8s4c4444kosg0s8co4c884s-scraperr_api` взято из твоего сгенерированного Coolify compose-файла.
+      - "traefik.http.services.http-0-b8s4c4444kosg0s8co4c884s-scraperr_api.loadbalancer.server.port=8000"
 
 networks:
-  web:
+  web: # Эта сеть будет создана Docker Compose, если не указано external: true
+    # Если Coolify создает свою собственную сеть (например, `b8s4c4444kosg0s8co4c884s`) и хочет,
+    # чтобы контейнеры были в ней, то эту секцию можно изменить или Coolify сам
+    # добавит контейнеры в нужную сеть.
+    # Оставим так, Docker Compose создаст сеть с именем `НАЗВАНИЕ_ПРОЕКТА_web`.
+    # Coolify, скорее всего, переопределит это и поместит сервисы в свою управляемую сеть.
+    # Если ты хочешь явно указать сеть Coolify, тебе нужно знать ее имя и указать `external: true`.
+    # Но обычно лучше позволить Coolify управлять этим.
+    # Для простоты можно вообще убрать `networks:` из сервисов и эту секцию,
+    # если Coolify сам корректно помещает их в одну сеть.
+    # Однако, для связи по именам сервисов (scraperr_api:8000) они должны быть в одной сети.
+    # Docker Compose по умолчанию поместит их в одну сеть, если `networks` не указаны явно в сервисах.
+    # Давай оставим так, как в оригинальном Scraperr docker-compose.
+
+# Замени `http-0-b8s4c4444kosg0s8co4c884s-scraperr` и `http-0-b8s4c4444kosg0s8co4c884s-scraperr_api`
+# на актуальные имена сервисов, которые Traefik использует для твоих роутеров, если они отличаются.
+# Ты можешь найти эти имена в сгенерированном Coolify `docker-compose.yml` в метках `traefik.http.routers.[имя_роутера].service=ИМЯ_СЕРВИСА_В_TRAEFIK`.
