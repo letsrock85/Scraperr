@@ -10,6 +10,9 @@ services:
       - '${scraperr_port}'
     networks:
       - web
+    labels:
+      - "traefik.enable=true" # Эта метка уже должна быть, если Traefik включен для сервиса
+      - "traefik.http.services.scraperr.loadbalancer.server.port=3000" # <-- ВАЖНАЯ МЕТКА!
   scraperr_api:
     init: True
     image: jpyles0524/scraperr_api:latest
